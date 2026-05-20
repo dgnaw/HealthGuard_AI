@@ -1,16 +1,16 @@
 import math
 import requests
 
+
 class MedicalLogisticRegression:
     def __init__(self):
         self.diseases_knowledge = {}
         self.load_knowledge_from_csharp()
 
     def load_knowledge_from_csharp(self):
-        print("Đang tải dữ liệu y khoa từ C# Database...")
+        print("Đang tải dữ liệu y khoa từ kho Web nâng cao...")
         try:
-            # LƯU Ý QUAN TRỌNG: Đổi cổng 5245 thành cổng localhost mà Backend C# của bạn đang chạy
-            csharp_api_url = "http://localhost:5297/api/Mobile/AiKnowledge"
+            csharp_api_url = "http://localhost:5297/api/Web/AiKnowledge"
 
             response = requests.get(csharp_api_url)
 
@@ -18,15 +18,14 @@ class MedicalLogisticRegression:
                 data = response.json()
                 for item in data:
                     self.diseases_knowledge[item['diseaseName']] = {
-                        "bias": -2.0,  # Đặt mức Bias mặc định chung cho các bệnh
-                        # Đổi lại Key thành kiểu số nguyên (int) cho mảng weights
+                        "bias": -2.0,
                         "weights": {int(k): float(v) for k, v in item['weights'].items()},
                         "desc": item['description'],
                         "treatment": item['treatment']
                     }
-                print(f"-> HOÀN TẤT! Đã nạp thành công {len(self.diseases_knowledge)} bệnh lý vào AI!")
+                print(f"-> HOÀN TẤT! Đã nạp thành công {len(self.diseases_knowledge)} bệnh lý từ kho Web!")
             else:
-                print(f"-> LỖI {response.status_code}: Không thể lấy dữ liệu. Chi tiết từ C#: {response.text}")
+                print(f"-> LỖI {response.status_code}: Không thể lấy dữ liệu. Chi tiết: {response.text}")
         except Exception as e:
             print(f"-> LỖI KẾT NỐI: {e}")
 
@@ -37,16 +36,26 @@ class MedicalLogisticRegression:
     def predict(self, symptom_ids):
         results = []
 
+        # Logic bóc tách ID nâng cao (chống sập khi nhận Object từ C#)
+        normalized_ids = []
+        for s in symptom_ids:
+            if isinstance(s, dict):
+                sym_id = s.get("symptomId", s.get("symptomid"))
+                if sym_id is not None: normalized_ids.append(int(sym_id))
+            else:
+                try:
+                    normalized_ids.append(int(s))
+                except:
+                    pass
+
         for disease_name, data in self.diseases_knowledge.items():
             z = data["bias"]
-
-            for sym_id in symptom_ids:
+            for sym_id in normalized_ids:
                 if sym_id in data["weights"]:
                     z += data["weights"][sym_id]
 
             probability = self._sigmoid(z)
 
-            # Chỉ trả về những bệnh có tỷ lệ > 1% cho nhẹ máy
             if probability > 0.01:
                 results.append({
                     "diseaseName": disease_name,
@@ -55,6 +64,5 @@ class MedicalLogisticRegression:
                     "treatment": data["treatment"]
                 })
 
-        # Sắp xếp bệnh tỷ lệ cao lên đầu
         results.sort(key=lambda x: x["probability"], reverse=True)
         return results
